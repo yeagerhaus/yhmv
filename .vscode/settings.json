@@ -1,0 +1,133 @@
+{
+	"search.exclude": {
+		"**/node_modules": true,
+		"**/bower_components": true,
+		"**/build": true
+	},
+	"[css]": {
+		"editor.defaultFormatter": "biomejs.biome"
+	},
+	"[json]": {
+		"editor.defaultFormatter": "biomejs.biome"
+	},
+	"[typescriptreact]": {
+		"editor.defaultFormatter": "biomejs.biome"
+	},
+	"[typescript]": {
+		"editor.defaultFormatter": "biomejs.biome"
+	},
+	"[javascript]": {
+		"editor.defaultFormatter": "biomejs.biome"
+	},
+	"[javascriptreact]": {
+		"editor.defaultFormatter": "biomejs.biome"
+	},
+	"editor.codeActionsOnSave": {
+		"source.fixAll": "explicit",
+		"source.organizeImports.biome": "explicit",
+		"source.fixAll.biome": "explicit"
+	},
+	"javascript.validate.enable": false,
+	"editor.formatOnPaste": false,
+	"editor.formatOnType": false,
+	"editor.formatOnSave": true,
+	"editor.formatOnSaveMode": "file",
+	/* 
+		Used to identify the VS Code window by color (for when multiple windows are open) 
+		Feel free to change colors if you want, but please don't remove it altogether
+	*/
+	"peacock.remoteColor": "#7f62f5",
+	"workbench.colorCustomizations": {
+		// Activity Bar
+		"activityBar.activeBackground": "#7f62f5",
+		"activityBar.background": "#5840b3",
+		"activityBar.foreground": "#FFFFFF",
+		"activityBar.inactiveForeground": "#FFFFFF99",
+		"activityBarBadge.background": "#9d7ff7",
+		"activityBarBadge.foreground": "#FFFFFF",
+
+		// Title Bar
+		"titleBar.activeBackground": "#0f0c1b",
+		"titleBar.activeForeground": "#FFFFFF",
+		"titleBar.inactiveBackground": "#0f0c1b99",
+		"titleBar.inactiveForeground": "#FFFFFF99",
+
+		// Status Bar
+		"statusBar.background": "#1b162a",
+		"statusBar.foreground": "#FFFFFF",
+		"statusBarItem.hoverBackground": "#7f62f5",
+		"statusBarItem.remoteBackground": "#1b162a",
+		"statusBarItem.remoteForeground": "#FFFFFF",
+
+		// Editor
+		"editor.background": "#0f0c1b",
+		"editor.foreground": "#FFFFFF",
+		"editor.lineHighlightBackground": "#7f62f511",
+		"editorCursor.foreground": "#7f62f5",
+		"editor.selectionBackground": "#7f62f522",
+		"editor.inactiveSelectionBackground": "#7f62f511",
+		"editorIndentGuide.activeBackground": "#7f62f544",
+		"editorIndentGuide.background": "#7f62f511",
+
+		// Sidebar
+		"sideBar.background": "#1b162a",
+		"sideBar.foreground": "#FFFFFF",
+		"sideBar.border": "#7f62f511",
+		"sideBarSectionHeader.background": "#0f0c1b",
+		"sideBarSectionHeader.foreground": "#FFFFFF",
+
+		// Panels (e.g. Terminal, Output, Problems)
+		"panel.background": "#1b162a",
+		"panel.border": "#7f62f511",
+		"panelTitle.activeBorder": "#7f62f5",
+		"panelTitle.activeForeground": "#FFFFFF",
+		"panelTitle.inactiveForeground": "#FFFFFF99",
+
+		// Tabs
+		"tab.activeBackground": "#1b162a",
+		"tab.inactiveBackground": "#0f0c1b",
+		"tab.activeForeground": "#FFFFFF",
+		"tab.inactiveForeground": "#FFFFFF99",
+		"tab.hoverBackground": "#7f62f5",
+		"tab.border": "#0f0c1b",
+
+		// Scrollbar
+		"scrollbarSlider.background": "#7f62f522",
+		"scrollbarSlider.hoverBackground": "#7f62f533",
+		"scrollbarSlider.activeBackground": "#7f62f566",
+
+		// Dropdowns, Inputs
+		"dropdown.background": "#0f0c1b",
+		"dropdown.foreground": "#FFFFFF",
+		"input.background": "#0f0c1b",
+		"input.foreground": "#FFFFFF",
+		"input.border": "#7f62f5",
+		"input.placeholderForeground": "#FFFFFF66",
+
+		// Lists
+		"list.hoverBackground": "#7f62f522",
+		"list.activeSelectionBackground": "#7f62f522",
+		"list.inactiveSelectionBackground": "#7f62f511",
+		"list.focusBackground": "#7f62f522",
+
+		// Terminal
+		"terminal.background": "#0f0c1b",
+		"terminal.foreground": "#FFFFFF",
+		"terminal.ansiBlack": "#0f0c1b",
+		"terminal.ansiRed": "#fa4d7f",
+		"terminal.ansiGreen": "#2EFFA0",
+		"terminal.ansiYellow": "#FFFA70",
+		"terminal.ansiBlue": "#6EBEFF",
+		"terminal.ansiMagenta": "#7f62f5",
+		"terminal.ansiCyan": "#70FFFF",
+		"terminal.ansiWhite": "#FFFFFF",
+		"terminal.ansiBrightBlack": "#666666",
+		"terminal.ansiBrightRed": "#ff6d9d",
+		"terminal.ansiBrightGreen": "#70FFC1",
+		"terminal.ansiBrightYellow": "#FFFFB0",
+		"terminal.ansiBrightBlue": "#A1D2FF",
+		"terminal.ansiBrightMagenta": "#9d7ff7",
+		"terminal.ansiBrightCyan": "#A3FFFF",
+		"terminal.ansiBrightWhite": "#FFFFFF"
+	}
+}
