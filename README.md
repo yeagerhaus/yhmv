@@ -1,6 +1,6 @@
-# yhwav
+# yhmv
 
-Plex music player built with Expo and React Native. iOS only.
+Plex video app (movies & TV) built with Expo and React Native. iOS only.
 
 ## Stack
 
@@ -9,53 +9,51 @@ Plex music player built with Expo and React Native. iOS only.
 | Expo 54 / React Native 0.81 | React 19 |
 | expo-router 6 | Zustand 5 |
 | Reanimated 4 | Biome 2 / TypeScript 5.9 |
-| Bun | Custom native audio module (AVQueuePlayer) |
+| Bun | expo-video (HLS playback) |
 
 ## Setup
 
-Requires Bun, Xcode with iOS Simulator, and a Plex server with music.
+Requires Bun, Xcode with iOS Simulator, and a Plex server with movie and TV libraries.
 
 ```bash
-bun prep    # install deps + pods
-bun start   # metro + dev client
+bun install   # install deps
+bun start     # Metro + dev client
 ```
 
-Auth is PIN-based — no env vars needed. Sign in via Settings > Sign in with Plex, then enter the PIN at plex.tv/activate.
+Auth is PIN-based or token-based. Sign in via **Settings > Account** (Sign in with Plex or enter token), then complete PIN at plex.tv/activate if using PIN.
 
 ## Scripts
 
 | Command | What it does |
 |---------|-------------|
 | `bun start` | Metro + dev client |
-| `bun prep` | Install deps + pods |
 | `bun b` | EAS build (iOS dev profile) |
 | `bun kill` | Kill port 8081 |
-| `bun clean` | Nuke node_modules, Pods, .expo |
+| `bun clean` | Remove node_modules and .expo |
 | `bun up` | Update deps + Expo version check |
 | `bun check:all` | tsc + biome |
 
 ## Structure
 
 ```
-app/                    # file-based routing (expo-router)
+app/                      # file-based routing (expo-router)
   (tabs)/
-    (library)/          # artists, albums, playlists, songs
-    (podcasts)/         # podcast screens
-    (settings)/         # settings
-    search/             # search
-  music/[id].tsx        # full-screen player modal
-components/             # BottomSheet, Player, DynamicItem, navigation, etc.
-hooks/                  # Zustand stores (library, audio, search, playback settings)
-utils/                  # Plex API client, auth, discovery, caching, scrobble queue
-modules/yhwav-audio/    # custom Expo module — gapless playback via AVQueuePlayer
-constants/              # API config, colors
-types/                  # shared TypeScript types
-tools/run.ts            # dev entry script
+    (home)/               # home — continue watching, recently added
+    (movies)/             # movies list, movie detail
+    (shows)/              # shows list, show/season detail
+    (settings)/           # account, appearance, developer
+    search/               # search
+  player/[id].tsx         # full-screen video player (movies & episodes)
+components/               # UI (Main, Div, Text, cards, Player, DynamicItem, etc.)
+hooks/                    # Zustand stores (video library, video player, offline), theme
+utils/                    # Plex API client, auth, discovery, scrobble
+constants/                # styles, colors, API config
+types/                    # shared TypeScript types
 ```
 
-## Audio
+## Playback
 
-Playback uses a custom native module (`yhwav-audio`) wrapping AVQueuePlayer for gapless playback. Queue state and playback position persist across restarts via AsyncStorage.
+Video playback uses **expo-video** with HLS streams from the Plex API. The player supports movies and TV episodes, landscape orientation, and progress reporting (continue watching). Transcode URLs are resolved via the Plex client with optional token auth.
 
 ## License
 
