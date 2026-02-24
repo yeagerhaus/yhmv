@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { VideoControls } from '@/components/Player/VideoControls';
 import { useVideoPlayerStore, type PlayableItem } from '@/hooks/useVideoPlayerStore';
+import { plexAuthService } from '@/utils/plex-auth';
 import { plexClient } from '@/utils/plex-client';
 import { fetchEpisodeDetail, fetchMovieDetail, scrobble } from '@/utils/plex';
 
@@ -16,15 +17,24 @@ export default function PlayerScreen() {
 	const [item, setItem] = useState<PlayableItem | null>(null);
 	const [streamUrl, setStreamUrl] = useState<string | null>(null);
 	const positionInterval = useRef<ReturnType<typeof setInterval>>(undefined);
+	const seekAppliedRef = useRef(false);
 
 	const loadItem = useCallback(async () => {
 		if (!id) return;
 
+		// Ensure client is ready (fast no-op when already initialized from browsing)
+		await plexClient.initialize();
+
+		// Start the player immediately — id IS the ratingKey, no metadata fetch needed first
+		const startUrl = plexClient.buildTranscodeURL(id);
+		setStreamUrl(startUrl);
+		console.log('[Player] Stream URL (HLS):', startUrl.replace(/X-Plex-Token=[^&]+/, 'X-Plex-Token=***'));
+
+		// Fetch metadata concurrently while the player is already buffering
 		const movie = await fetchMovieDetail(id);
 		if (movie && movie.mediaKey) {
 			const playable: PlayableItem = { ...movie, type: 'movie' };
 			setItem(playable);
-			setStreamUrl(plexClient.buildMediaURL(movie.mediaKey));
 			store.playVideo(playable);
 			return;
 		}
@@ -33,12 +43,12 @@ export default function PlayerScreen() {
 		if (episode && episode.mediaKey) {
 			const playable: PlayableItem = { ...episode, type: 'episode' };
 			setItem(playable);
-			setStreamUrl(plexClient.buildMediaURL(episode.mediaKey));
 			store.playVideo(playable);
 		}
 	}, [id]);
 
 	useEffect(() => {
+		seekAppliedRef.current = false;
 		loadItem();
 	}, [loadItem]);
 
@@ -49,13 +59,27 @@ export default function PlayerScreen() {
 		};
 	}, []);
 
-	const player = useVideoPlayer(streamUrl ?? '', (p) => {
+	const token = plexAuthService.getAccessToken();
+	const videoSource = streamUrl
+		? {
+				uri: streamUrl,
+				contentType: 'hls' as const,
+				...(token && { headers: { 'X-Plex-Token': token } }),
+			}
+		: '';
+	const player = useVideoPlayer(videoSource, (p) => {
 		if (!streamUrl) return;
 		p.play();
-		if (item?.viewOffset && item.viewOffset > 0) {
-			p.currentTime = item.viewOffset / 1000;
-		}
 	});
+
+	// Seek to resume position once metadata arrives (player is already buffering by then)
+	useEffect(() => {
+		if (!player || !item || seekAppliedRef.current) return;
+		if (item.viewOffset && item.viewOffset > 0) {
+			player.currentTime = item.viewOffset / 1000;
+		}
+		seekAppliedRef.current = true;
+	}, [item, player]);
 
 	useEffect(() => {
 		if (!player) return;
@@ -75,6 +99,18 @@ export default function PlayerScreen() {
 			if (positionInterval.current) clearInterval(positionInterval.current);
 		};
 	}, [player]);
+
+	// Debug: log player status and errors
+	useEffect(() => {
+		if (!player || !streamUrl) return;
+		const sub = player.addListener('statusChange', (payload) => {
+			console.log('[Player] status:', payload.status, payload.oldStatus ? `(from ${payload.oldStatus})` : '');
+			if (payload.error) {
+				console.error('[Player] error:', payload.error.message ?? payload.error);
+			}
+		});
+		return () => sub.remove();
+	}, [player, streamUrl]);
 
 	const handleClose = useCallback(() => {
 		store.stop();

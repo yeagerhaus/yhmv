@@ -73,6 +73,9 @@ export class PlexClient {
 	}
 
 	private async _doInitialize(): Promise<void> {
+		// Ensure auth state is loaded from storage before checking (avoids race with Home/tabs mounting first)
+		await plexAuthService.loadAuthState();
+
 		if (!plexAuthService.isAuthenticated()) {
 			throw new Error('No Plex authentication available. Please sign in through Settings.');
 		}
@@ -174,15 +177,22 @@ export class PlexClient {
 		return url.toString();
 	}
 
+	/**
+	 * Build transcode start URL. Uses metadata key (ratingKey) as path — Plex expects
+	 * /library/metadata/<id>, not the part key; using part key returns 400.
+	 */
 	buildTranscodeURL(
-		mediaKey: string,
+		ratingKey: string,
 		options: { maxWidth?: number; maxHeight?: number; videoBitrate?: number; audioBoost?: number } = {},
 	): string {
 		const { maxWidth = 1920, maxHeight = 1080, videoBitrate = 20000, audioBoost = 100 } = options;
-		const session = `yhmv-${Date.now()}`;
+		const transcodeSessionId = `yhmv-${Date.now()}`;
+		const path = `/library/metadata/${ratingKey}`;
 
 		return this.buildURL('/video/:/transcode/universal/start.m3u8', {
-			path: mediaKey,
+			path,
+			transcodeSessionId,
+			'X-Plex-Session-Identifier': transcodeSessionId,
 			mediaIndex: '0',
 			partIndex: '0',
 			protocol: 'hls',
@@ -193,10 +203,31 @@ export class PlexClient {
 			audioBoost: String(audioBoost),
 			maxVideoBitrate: String(videoBitrate),
 			videoResolution: `${maxWidth}x${maxHeight}`,
-			session,
 			'X-Plex-Client-Identifier': 'yhmv-mobile',
 			'X-Plex-Product': 'yhmv',
+			'X-Plex-Platform': 'iOS',
 		});
+	}
+
+	/**
+	 * Resolve the transcode start URL to the final session playlist URL.
+	 * Plex may respond with a redirect; the native player can fail with "resource unavailable"
+	 * if it doesn't follow redirects or loses auth. Resolving in JS and passing the final URL fixes that.
+	 */
+	async resolveTranscodeStreamUrl(startUrl: string): Promise<string> {
+		const controller = this.createTimeoutController(15000);
+		const response = await fetch(startUrl, {
+			method: 'GET',
+			redirect: 'follow',
+			signal: controller.signal,
+		});
+		if (!response.ok) {
+			const body = await response.text().catch(() => '');
+			console.error('[PlexClient] Transcode 400 body:', body);
+			throw new Error(`Transcode start failed: ${response.status}`);
+		}
+		await response.text(); // consume body
+		return response.url;
 	}
 
 	// ── HTTP Infrastructure ────────────────────────────────────────────
@@ -535,7 +566,8 @@ export class PlexClient {
 			const response = await this.request(`/library/metadata/${movieId}`);
 			const data = response.data as any;
 			const item = data?.MediaContainer?.Metadata?.[0];
-			return item ? this.formatMovie(item) : null;
+			if (!item || item.type !== 'movie') return null;
+			return this.formatMovie(item);
 		} catch {
 			return null;
 		}
@@ -548,7 +580,7 @@ export class PlexClient {
 			const response = await this.request(`/library/metadata/${episodeId}`);
 			const data = response.data as any;
 			const item = data?.MediaContainer?.Metadata?.[0];
-			if (!item) return null;
+			if (!item || item.type !== 'episode') return null;
 			return this.formatEpisode(item, item.grandparentRatingKey || '', item.parentRatingKey || '');
 		} catch {
 			return null;
