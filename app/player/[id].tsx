@@ -8,7 +8,7 @@ import { VideoControls } from '@/components/Player/VideoControls';
 import { useVideoPlayerStore, type PlayableItem } from '@/hooks/useVideoPlayerStore';
 import { plexAuthService } from '@/utils/plex-auth';
 import { plexClient } from '@/utils/plex-client';
-import { fetchEpisodeDetail, fetchMovieDetail, scrobble } from '@/utils/plex';
+import { fetchEpisodeDetail, fetchEpisodes, fetchMovieDetail, scrobble } from '@/utils/plex';
 
 export default function PlayerScreen() {
 	const { id } = useLocalSearchParams<{ id: string }>();
@@ -16,7 +16,10 @@ export default function PlayerScreen() {
 	const store = useVideoPlayerStore();
 	const [item, setItem] = useState<PlayableItem | null>(null);
 	const [streamUrl, setStreamUrl] = useState<string | null>(null);
-	const positionInterval = useRef<ReturnType<typeof setInterval>>(undefined);
+	const [nextEpisodeId, setNextEpisodeId] = useState<string | null>(null);
+	const [prevEpisodeId, setPrevEpisodeId] = useState<string | null>(null);
+	const [selectedSubtitleIndex, setSelectedSubtitleIndex] = useState<number | null>(null);
+	const prevSubtitleIndexRef = useRef<number | null | undefined>(undefined);
 	const seekAppliedRef = useRef(false);
 
 	const loadItem = useCallback(async () => {
@@ -28,14 +31,15 @@ export default function PlayerScreen() {
 		// Start the player immediately — id IS the ratingKey, no metadata fetch needed first
 		const startUrl = plexClient.buildTranscodeURL(id);
 		setStreamUrl(startUrl);
-		console.log('[Player] Stream URL (HLS):', startUrl.replace(/X-Plex-Token=[^&]+/, 'X-Plex-Token=***'));
 
 		// Fetch metadata concurrently while the player is already buffering
 		const movie = await fetchMovieDetail(id);
 		if (movie && movie.mediaKey) {
 			const playable: PlayableItem = { ...movie, type: 'movie' };
 			setItem(playable);
-			store.playVideo(playable);
+			useVideoPlayerStore.getState().playVideo(playable);
+			setNextEpisodeId(null);
+			setPrevEpisodeId(null);
 			return;
 		}
 
@@ -43,7 +47,14 @@ export default function PlayerScreen() {
 		if (episode && episode.mediaKey) {
 			const playable: PlayableItem = { ...episode, type: 'episode' };
 			setItem(playable);
-			store.playVideo(playable);
+			useVideoPlayerStore.getState().playVideo(playable);
+			const seasonEpisodes = await fetchEpisodes(episode.seasonId);
+			const idx = seasonEpisodes.findIndex((ep) => ep.id === id);
+			setNextEpisodeId(idx >= 0 && idx < seasonEpisodes.length - 1 ? seasonEpisodes[idx + 1].id : null);
+			setPrevEpisodeId(idx > 0 ? seasonEpisodes[idx - 1].id : null);
+		} else {
+			setNextEpisodeId(null);
+			setPrevEpisodeId(null);
 		}
 	}, [id]);
 
@@ -81,24 +92,43 @@ export default function PlayerScreen() {
 		seekAppliedRef.current = true;
 	}, [item, player]);
 
+	// Use timeUpdate for snappier position updates (no setInterval)
 	useEffect(() => {
 		if (!player) return;
-
-		positionInterval.current = setInterval(() => {
-			if (player.currentTime != null) {
-				store.setPosition(player.currentTime * 1000);
+		player.timeUpdateEventInterval = 0.25;
+		const sub = player.addListener('timeUpdate', (payload) => {
+			if (payload.currentTime != null) {
+				store.setPosition(payload.currentTime * 1000);
 			}
 			if (player.duration != null && player.duration > 0) {
 				store.setDuration(player.duration * 1000);
 			}
 			store.setPlaying(player.playing);
 			store.setBuffering(player.status === 'loading');
-		}, 500);
+		});
+		return () => sub.remove();
+	}, [player, store]);
 
-		return () => {
-			if (positionInterval.current) clearInterval(positionInterval.current);
+	// Apply subtitle selection by replacing the source (only when user changes subtitle)
+	useEffect(() => {
+		if (!player || !id) return;
+		if (prevSubtitleIndexRef.current === undefined) {
+			prevSubtitleIndexRef.current = selectedSubtitleIndex;
+			return;
+		}
+		if (prevSubtitleIndexRef.current === selectedSubtitleIndex) return;
+		prevSubtitleIndexRef.current = selectedSubtitleIndex;
+		const url = plexClient.buildTranscodeURL(id, {
+			subtitleStreamIndex: selectedSubtitleIndex ?? undefined,
+		});
+		const token = plexAuthService.getAccessToken();
+		const source = {
+			uri: url,
+			contentType: 'hls' as const,
+			...(token && { headers: { 'X-Plex-Token': token } }),
 		};
-	}, [player]);
+		player.replace(source);
+	}, [player, id, selectedSubtitleIndex]);
 
 	// Debug: log player status and errors
 	useEffect(() => {
@@ -135,10 +165,10 @@ export default function PlayerScreen() {
 	const handleSeek = useCallback(
 		(positionMs: number) => {
 			if (!player) return;
-			player.currentTime = positionMs / 1000;
 			store.setPosition(positionMs);
+			player.currentTime = positionMs / 1000;
 		},
-		[player],
+		[player, store],
 	);
 
 	const handleSkipBack = useCallback(() => {
@@ -150,6 +180,24 @@ export default function PlayerScreen() {
 		if (!player) return;
 		player.currentTime = player.currentTime + 10;
 	}, [player]);
+
+	const handleRestart = useCallback(() => {
+		if (!player) return;
+		player.replay();
+		store.setPosition(0);
+	}, [player, store]);
+
+	const handleNext = useCallback(() => {
+		if (!nextEpisodeId) return;
+		store.stop();
+		router.replace(`/player/${nextEpisodeId}`);
+	}, [nextEpisodeId, store, router]);
+
+	const handlePrevious = useCallback(() => {
+		if (!prevEpisodeId) return;
+		store.stop();
+		router.replace(`/player/${prevEpisodeId}`);
+	}, [prevEpisodeId, store, router]);
 
 	const subtitle =
 		item && 'episodeNumber' in item ? `S${item.seasonNumber} E${item.episodeNumber}` : undefined;
@@ -165,12 +213,14 @@ export default function PlayerScreen() {
 				player={player}
 				style={StyleSheet.absoluteFill}
 				nativeControls={false}
+				allowsPictureInPicture
 				contentFit='contain'
 			/>
 			<VideoControls
 				isPlaying={store.isPlaying}
 				position={store.position}
 				duration={store.duration}
+				bufferedPosition={player.bufferedPosition >= 0 ? player.bufferedPosition * 1000 : undefined}
 				title={item?.title ?? ''}
 				subtitle={subtitle}
 				onPlayPause={handlePlayPause}
@@ -178,6 +228,14 @@ export default function PlayerScreen() {
 				onSkipBack={handleSkipBack}
 				onSkipForward={handleSkipForward}
 				onClose={handleClose}
+				onRestart={handleRestart}
+				onPrevious={handlePrevious}
+				onNext={handleNext}
+				hasPrevious={!!prevEpisodeId}
+				hasNext={!!nextEpisodeId}
+				subtitleTracks={item?.subtitleTracks}
+				selectedSubtitleIndex={selectedSubtitleIndex}
+				onSubtitleSelect={setSelectedSubtitleIndex}
 			/>
 		</View>
 	);

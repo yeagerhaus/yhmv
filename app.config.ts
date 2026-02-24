@@ -38,7 +38,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
 				preventAutoHide: true,
 			},
 		],
-		'expo-video',
+		[
+			"expo-video",
+			{
+				supportsBackgroundPlayback: true,
+				supportsPictureInPicture: true,
+			},
+		],
 		'expo-web-browser',
 	],
 	experiments: {

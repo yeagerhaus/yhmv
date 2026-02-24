@@ -1,3 +1,5 @@
+import type { PlexSubtitleTrack } from './subtitle';
+
 export interface Movie {
 	id: string;
 	title: string;
@@ -15,4 +17,5 @@ export interface Movie {
 	viewOffset?: number;
 	viewCount?: number;
 	mediaKey?: string;
+	subtitleTracks?: PlexSubtitleTrack[];
 }

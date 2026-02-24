@@ -4,6 +4,7 @@ import type { Episode } from '@/types/episode';
 import type { Movie } from '@/types/movie';
 import type { Season } from '@/types/season';
 import type { Show } from '@/types/show';
+import type { PlexSubtitleTrack } from '@/types/subtitle';
 import { plexAuthService } from './plex-auth';
 import { plexDiscoveryService } from './plex-discovery';
 
@@ -183,13 +184,19 @@ export class PlexClient {
 	 */
 	buildTranscodeURL(
 		ratingKey: string,
-		options: { maxWidth?: number; maxHeight?: number; videoBitrate?: number; audioBoost?: number } = {},
+		options: {
+			maxWidth?: number;
+			maxHeight?: number;
+			videoBitrate?: number;
+			audioBoost?: number;
+			subtitleStreamIndex?: number;
+		} = {},
 	): string {
-		const { maxWidth = 1920, maxHeight = 1080, videoBitrate = 20000, audioBoost = 100 } = options;
+		const { maxWidth = 1920, maxHeight = 1080, videoBitrate = 20000, audioBoost = 100, subtitleStreamIndex } = options;
 		const transcodeSessionId = `yhmv-${Date.now()}`;
 		const path = `/library/metadata/${ratingKey}`;
 
-		return this.buildURL('/video/:/transcode/universal/start.m3u8', {
+		const params: Record<string, string> = {
 			path,
 			transcodeSessionId,
 			'X-Plex-Session-Identifier': transcodeSessionId,
@@ -206,7 +213,11 @@ export class PlexClient {
 			'X-Plex-Client-Identifier': 'yhmv-mobile',
 			'X-Plex-Product': 'yhmv',
 			'X-Plex-Platform': 'iOS',
-		});
+		};
+		if (subtitleStreamIndex != null && subtitleStreamIndex >= 0) {
+			params.subtitleStreamIndex = String(subtitleStreamIndex);
+		}
+		return this.buildURL('/video/:/transcode/universal/start.m3u8', params);
 	}
 
 	/**
@@ -618,6 +629,20 @@ export class PlexClient {
 
 	// ── Formatters ─────────────────────────────────────────────────────
 
+	private parseSubtitleTracks(part: any): PlexSubtitleTrack[] {
+		const raw = part?.Stream;
+		const streams = Array.isArray(raw) ? raw : raw ? [raw] : [];
+		return streams
+			.map((s: any, i: number) => ({ stream: s, i }))
+			.filter(({ stream }: { stream: any }) => Number(stream.streamType) === 3 || stream.streamType === '3')
+			.map(({ stream, i }: { stream: any; i: number }) => ({
+				index: i,
+				language: stream.language,
+				codec: stream.codec,
+				displayTitle: stream.displayTitle || stream.title,
+			}));
+	}
+
 	private formatMovie(raw: any): Movie {
 		const media = raw.Media?.[0];
 		const part = media?.Part?.[0];
@@ -639,6 +664,7 @@ export class PlexClient {
 			viewOffset: raw.viewOffset ? Number.parseInt(raw.viewOffset) : undefined,
 			viewCount: raw.viewCount ? Number.parseInt(raw.viewCount) : undefined,
 			mediaKey: part?.key,
+			subtitleTracks: this.parseSubtitleTracks(part),
 		};
 	}
 
@@ -692,6 +718,7 @@ export class PlexClient {
 			viewOffset: raw.viewOffset ? Number.parseInt(raw.viewOffset) : undefined,
 			viewCount: raw.viewCount ? Number.parseInt(raw.viewCount) : undefined,
 			mediaKey: part?.key,
+			subtitleTracks: this.parseSubtitleTracks(part),
 		};
 	}
 }

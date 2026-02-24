@@ -1,15 +1,17 @@
+import Slider from '@react-native-community/slider';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Pressable, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActionSheetIOS, Alert, Animated, Platform, Pressable, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from '../Text';
+import type { PlexSubtitleTrack } from '@/types/subtitle';
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
 const AUTO_HIDE_MS = 4000;
 
 interface VideoControlsProps {
 	isPlaying: boolean;
 	position: number;
 	duration: number;
+	bufferedPosition?: number;
 	title: string;
 	subtitle?: string;
 	onPlayPause: () => void;
@@ -17,6 +19,14 @@ interface VideoControlsProps {
 	onSkipBack: () => void;
 	onSkipForward: () => void;
 	onClose: () => void;
+	onRestart?: () => void;
+	onPrevious?: () => void;
+	onNext?: () => void;
+	hasPrevious?: boolean;
+	hasNext?: boolean;
+	subtitleTracks?: PlexSubtitleTrack[];
+	selectedSubtitleIndex?: number | null;
+	onSubtitleSelect?: (index: number | null) => void;
 }
 
 function formatTime(ms: number): string {
@@ -34,6 +44,7 @@ export function VideoControls({
 	isPlaying,
 	position,
 	duration,
+	bufferedPosition,
 	title,
 	subtitle,
 	onPlayPause,
@@ -41,8 +52,18 @@ export function VideoControls({
 	onSkipBack,
 	onSkipForward,
 	onClose,
+	onRestart,
+	onPrevious,
+	onNext,
+	hasPrevious,
+	hasNext,
+	subtitleTracks,
+	selectedSubtitleIndex,
+	onSubtitleSelect,
 }: VideoControlsProps) {
 	const [visible, setVisible] = useState(true);
+	const [scrubbing, setScrubbing] = useState(false);
+	const [scrubPosition, setScrubPosition] = useState(0);
 	const opacity = useRef(new Animated.Value(1)).current;
 	const hideTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -81,12 +102,57 @@ export function VideoControls({
 	};
 
 	const progress = duration > 0 ? position / duration : 0;
+	const displayPosition = scrubbing ? scrubPosition : position;
+	const displayProgress = duration > 0 ? displayPosition / duration : 0;
+	const bufferedRatio =
+		duration > 0 && bufferedPosition != null && bufferedPosition > 0
+			? Math.min(bufferedPosition / duration, 1)
+			: 0;
 
-	const handleSeekPress = (e: any) => {
-		const x = e.nativeEvent.locationX;
-		const barWidth = SCREEN_WIDTH - 32;
-		const seekPosition = (x / barWidth) * duration;
-		onSeek(Math.max(0, Math.min(seekPosition, duration)));
+	const handleSlidingStart = () => {
+		setScrubbing(true);
+		setScrubPosition(position);
+	};
+
+	const handleValueChange = (value: number) => {
+		setScrubPosition(value * duration);
+	};
+
+	const handleSlidingComplete = (value: number) => {
+		setScrubbing(false);
+		const positionMs = value * duration;
+		onSeek(Math.max(0, Math.min(positionMs, duration)));
+	};
+
+	const showSubtitlePicker = () => {
+		if (!subtitleTracks?.length || !onSubtitleSelect) return;
+		const options = ['None', ...subtitleTracks.map((t) => t.displayTitle || t.language || t.codec || `Track ${t.index + 1}`)];
+		const cancelButtonIndex = 0;
+		if (Platform.OS === 'ios') {
+			ActionSheetIOS.showActionSheetWithOptions(
+				{
+					options: [...options, 'Cancel'],
+					cancelButtonIndex: options.length,
+				},
+				(buttonIndex) => {
+					if (buttonIndex === options.length) return;
+					onSubtitleSelect(buttonIndex === 0 ? null : subtitleTracks[buttonIndex - 1].index);
+				},
+			);
+		} else {
+			Alert.alert(
+				'Subtitles',
+				undefined,
+				[
+					{ text: 'Cancel', style: 'cancel' },
+					{ text: 'None', onPress: () => onSubtitleSelect(null) },
+					...subtitleTracks.map((t) => ({
+						text: t.displayTitle || t.language || t.codec || `Track ${t.index + 1}`,
+						onPress: () => onSubtitleSelect(t.index),
+					})),
+				],
+			);
+		}
 	};
 
 	return (
@@ -107,15 +173,39 @@ export function VideoControls({
 							</Text>
 						)}
 					</View>
-					<View style={{ width: 22 }} />
+					{subtitleTracks && subtitleTracks.length > 0 ? (
+						<TouchableOpacity onPress={showSubtitlePicker} hitSlop={20}>
+							<SymbolView
+								name={selectedSubtitleIndex != null ? 'captions.bubble.fill' : 'captions.bubble'}
+								type='monochrome'
+								tintColor='#fff'
+								size={22}
+							/>
+						</TouchableOpacity>
+					) : (
+						<View style={{ width: 22 }} />
+					)}
 				</View>
 
 				{/* Center controls */}
 				<View style={styles.centerControls}>
+					{hasPrevious && onPrevious ? (
+						<TouchableOpacity onPress={onPrevious} hitSlop={20}>
+							<SymbolView name='backward.end.fill' type='monochrome' tintColor='#fff' size={36} />
+						</TouchableOpacity>
+					) : (
+						<View style={styles.placeholderButton} />
+					)}
 					<TouchableOpacity onPress={onSkipBack} hitSlop={20}>
 						<SymbolView name='gobackward.10' type='monochrome' tintColor='#fff' size={36} />
 					</TouchableOpacity>
-
+					{/* {onRestart ? (
+						<TouchableOpacity onPress={onRestart} hitSlop={20}>
+							<SymbolView name='arrow.counterclockwise' type='monochrome' tintColor='#fff' size={28} />
+						</TouchableOpacity>
+					) : (
+						<View style={styles.placeholderButton} />
+					)} */}
 					<TouchableOpacity onPress={onPlayPause} hitSlop={20} style={styles.playButton}>
 						<SymbolView
 							name={isPlaying ? 'pause.fill' : 'play.fill'}
@@ -124,22 +214,41 @@ export function VideoControls({
 							size={44}
 						/>
 					</TouchableOpacity>
-
 					<TouchableOpacity onPress={onSkipForward} hitSlop={20}>
 						<SymbolView name='goforward.10' type='monochrome' tintColor='#fff' size={36} />
 					</TouchableOpacity>
+					{hasNext && onNext ? (
+						<TouchableOpacity onPress={onNext} hitSlop={20}>
+							<SymbolView name='forward.end.fill' type='monochrome' tintColor='#fff' size={36} />
+						</TouchableOpacity>
+					) : (
+						<View style={styles.placeholderButton} />
+					)}
 				</View>
 
 				{/* Bottom bar - progress */}
 				<View style={styles.bottomBar}>
 					<Text type='bodyXS' style={styles.timeText}>
-						{formatTime(position)}
+						{formatTime(displayPosition)}
 					</Text>
-					<Pressable style={styles.progressBar} onPress={handleSeekPress}>
+					<View style={styles.progressBar}>
 						<View style={styles.progressTrack}>
-							<View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+							<View style={[styles.bufferedFill, { width: `${bufferedRatio * 100}%` }]} />
+							<View style={[styles.progressFill, { width: `${displayProgress * 100}%` }]} />
 						</View>
-					</Pressable>
+						<Slider
+							style={styles.slider}
+							minimumValue={0}
+							maximumValue={duration > 0 ? 1 : 1}
+							value={scrubbing ? displayProgress : progress}
+							minimumTrackTintColor='transparent'
+							maximumTrackTintColor='transparent'
+							thumbTintColor='#fff'
+							onSlidingStart={handleSlidingStart}
+							onValueChange={handleValueChange}
+							onSlidingComplete={handleSlidingComplete}
+						/>
+					</View>
 					<Text type='bodyXS' style={styles.timeText}>
 						{formatTime(duration)}
 					</Text>
@@ -154,11 +263,12 @@ const styles = StyleSheet.create({
 		...StyleSheet.absoluteFillObject,
 		backgroundColor: 'rgba(0,0,0,0.5)',
 		justifyContent: 'space-between',
+		padding: 16,
 	},
 	topBar: {
 		flexDirection: 'row',
 		alignItems: 'center',
-		paddingHorizontal: 16,
+		paddingHorizontal: 32,
 		paddingTop: 16,
 		gap: 12,
 	},
@@ -168,8 +278,9 @@ const styles = StyleSheet.create({
 		flexDirection: 'row',
 		alignItems: 'center',
 		justifyContent: 'center',
-		gap: 48,
+		gap: 24,
 	},
+	placeholderButton: { width: 36, height: 36 },
 	playButton: {
 		width: 72,
 		height: 72,
@@ -188,10 +299,25 @@ const styles = StyleSheet.create({
 	timeText: { color: '#fff', minWidth: 50, textAlign: 'center' },
 	progressBar: { flex: 1, height: 30, justifyContent: 'center' },
 	progressTrack: {
+		position: 'absolute',
+		left: 0,
+		right: 0,
 		height: 4,
 		backgroundColor: 'rgba(255,255,255,0.3)',
 		borderRadius: 2,
 		overflow: 'hidden',
 	},
+	bufferedFill: {
+		position: 'absolute',
+		left: 0,
+		top: 0,
+		bottom: 0,
+		backgroundColor: 'rgba(255,255,255,0.2)',
+		borderRadius: 2,
+	},
 	progressFill: { height: 4, backgroundColor: '#7f62f5', borderRadius: 2 },
+	slider: {
+		flex: 1,
+		height: 30,
+	},
 });
